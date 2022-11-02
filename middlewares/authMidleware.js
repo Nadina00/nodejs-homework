@@ -24,21 +24,9 @@ const tokenMidleware = async (req, res, next) => {
         })
       );
     }
-
-    const { email, subscription } = user;
-
     req.token = token;
     req.user = user;
-    next(
-      res.json({
-        status: "success",
-        code: 200,
-        data: {
-          email,
-          subscription,
-        },
-      })
-    );
+    next();
   } catch (err) {
     console.log(err.message);
   }

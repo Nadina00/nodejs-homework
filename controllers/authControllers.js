@@ -2,7 +2,6 @@ const { User } = require("../db/usersModal");
 const secret = `${process.env.SECRET}`;
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
-const passport = require("passport");
 
 const registrationCont = async (req, res, next) => {
   const { userName, email, password } = req.body;
@@ -53,7 +52,6 @@ const loginCont = async (req, res, next) => {
   const token = jwt.sign(payload, secret, { expiresIn: "1h" });
   await User.findByIdAndUpdate({ _id: user.id }, { token }, { new: true });
 
-  console.log(user);
   res.json({
     status: "success",
     code: 200,
@@ -62,51 +60,12 @@ const loginCont = async (req, res, next) => {
     },
   });
 };
-const authMidlewar = (req, res, next) => {
-  passport.authenticate("jwt", { session: false }, (err, user) => {
-    if (!user || err) {
-      console.log(user);
-      return res.status(401).json({
-        status: "error",
-        code: 401,
-        message: "Unauthorized",
-        data: "Unauthorized",
-      });
-    }
-    req.user = user;
-    next();
-  })(req, res, next);
-};
-const listCont = (req, res, next) => {
-  const { userName } = req.user;
-  res.json({
-    status: "success",
-    code: 200,
-    data: {
-      message: `Authorization was successful: ${userName}`,
-    },
-  });
-};
 
 const updateStatusSub = async (req, res, next) => {
   try {
-    const [, token] = req.headers.authorization.split(" ");
-    if (!token) {
-      next(
-        res.status(401).json({
-          status: "error",
-          code: 401,
-          message: "Not authorized",
-        })
-      );
-    }
-    const userToken = jwt.decode(token, process.env.SECRET);
-    const user = await User.findById(userToken.id);
-    const { id } = req.params;
     const { subscription } = req.body;
-
     const results = await User.findByIdAndUpdate(
-      { _id: id },
+      { _id: req.user.id },
       { subscription },
       { new: true }
     );
@@ -123,33 +82,30 @@ const updateStatusSub = async (req, res, next) => {
   }
 };
 
+const currentUser = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const { subscription } = req.user;
+
+    res.json({
+      status: "success",
+      code: 200,
+      data: {
+        email,
+        subscription,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    next(e);
+  }
+};
+
 const logoutCont = async (req, res, next) => {
   try {
-    const [, token] = req.headers.authorization.split(" ");
-    if (!token) {
-      next(
-        res.status(401).json({
-          status: "error",
-          code: 401,
-          message: "Not authorized",
-        })
-      );
-    }
-    const userToken = jwt.decode(token, process.env.SECRET);
-    const user = await User.findById(userToken.id);
-    if (token !== user.token) {
-      return res.status(401).json({
-        status: "error",
-        code: 401,
-        message: "Not authorized",
-      });
-    }
-    console.log(user.token);
-    user.token = null;
-    console.log(user.token);
     await User.findByIdAndUpdate(
-      { _id: user.id },
-      { token: user.token },
+      { _id: req.user.id },
+      { token: null },
       { new: true }
     );
 
@@ -168,8 +124,7 @@ const logoutCont = async (req, res, next) => {
 module.exports = {
   registrationCont,
   loginCont,
-  listCont,
-  authMidlewar,
   updateStatusSub,
+  currentUser,
   logoutCont,
 };

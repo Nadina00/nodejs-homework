@@ -6,6 +6,7 @@ const {
   registrationCont,
   loginCont,
   updateStatusSub,
+  currentUser,
   logoutCont,
 } = require("../../controllers/authControllers");
 
@@ -15,10 +16,10 @@ router.post("/signup", registrationCont);
 
 router.post("/login", loginCont);
 
-router.get("/current", tokenMidleware);
+router.get("/current", tokenMidleware, currentUser);
 
-router.get("/logout", logoutCont);
+router.get("/logout", tokenMidleware, logoutCont);
 
-router.patch("/:id", updateStatusSub);
+router.patch("/:id", tokenMidleware, updateStatusSub);
 
 module.exports = router;
