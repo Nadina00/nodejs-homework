@@ -2,6 +2,10 @@ const { User } = require("../db/usersModal");
 const secret = `${process.env.SECRET}`;
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const fs = require("fs/promises");
+const path = require("path");
+const gravatar = require("gravatar");
+const Jimp = require("jimp");
 
 const registrationCont = async (req, res, next) => {
   const { userName, email, password } = req.body;
@@ -15,15 +19,18 @@ const registrationCont = async (req, res, next) => {
     });
   }
   try {
-    const newUser = new User({ userName, email });
+    const avatarURL = gravatar.url(email);
+    const newUser = new User({ userName, email, avatarURL });
     newUser.setPassword(password);
     await newUser.save();
+
     res.status(201).json({
       status: "success",
       code: 201,
       data: {
         email,
         userName,
+        avatarURL,
         message: "Registration successful",
       },
     });
@@ -84,8 +91,7 @@ const updateStatusSub = async (req, res, next) => {
 
 const currentUser = async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const { subscription } = req.user;
+    const { subscription, email } = req.user;
 
     res.json({
       status: "success",
@@ -98,6 +104,44 @@ const currentUser = async (req, res, next) => {
   } catch (e) {
     console.error(e);
     next(e);
+  }
+};
+
+const userAvatar = async (req, res, next) => {
+  const { path: tmpUpload, originalname } = req.file;
+  const { _id: id } = req.user;
+  const imageName = `${id}_${originalname}`;
+  try {
+    const resultUpload = path.join(
+      __dirname,
+      "../",
+      "public",
+      "avatars",
+      imageName
+    );
+    const img = await Jimp.read(tmpUpload);
+    await img
+      .autocrop()
+      .cover(
+        250,
+        250,
+        Jimp.HORIZONTAL_ALIGN_CENTER || Jimp.VERTICAL_ALIGN_MIDDLE
+      )
+      .writeAsync(tmpUpload);
+    await fs.rename(tmpUpload, resultUpload);
+    const avatarURL = path.join("public", "avatars", imageName);
+    await User.findByIdAndUpdate(req.user.id, { avatarURL });
+
+    res.status(201).json({
+      status: "success",
+      code: 201,
+      data: {
+        avatarURL,
+      },
+    });
+  } catch (error) {
+    await fs.unlink(tmpUpload);
+    next(error.message);
   }
 };
 
@@ -126,5 +170,6 @@ module.exports = {
   loginCont,
   updateStatusSub,
   currentUser,
+  userAvatar,
   logoutCont,
 };
