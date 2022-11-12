@@ -6,6 +6,10 @@ const fs = require("fs/promises");
 const path = require("path");
 const gravatar = require("gravatar");
 const Jimp = require("jimp");
+const sgMail = require("@sendgrid/mail");
+const { v4: uuidv4 } = require("uuid");
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const registrationCont = async (req, res, next) => {
   const { userName, email, password } = req.body;
@@ -20,9 +24,19 @@ const registrationCont = async (req, res, next) => {
   }
   try {
     const avatarURL = gravatar.url(email);
-    const newUser = new User({ userName, email, avatarURL });
+    const verificationToken = uuidv4();
+    const newUser = new User({ userName, email, avatarURL, verificationToken });
     newUser.setPassword(password);
     await newUser.save();
+
+    const msg = {
+      to: email,
+      from: email,
+      subject: "Thank you for registration",
+      text: "Wellcame in our website",
+      html: `Wellcame in our website <a href="http://localhost:3000/api/users/verify/${verificationToken}">please confirm your email adress </a>`,
+    };
+    await sgMail.send(msg);
 
     res.status(201).json({
       status: "success",
@@ -39,6 +53,86 @@ const registrationCont = async (req, res, next) => {
   }
 };
 
+
+
+const verificationCont = async (req, res, next) => {
+  const { verificationToken } = req.params;
+  const user = await User.findOne({ verificationToken });
+  if (!user) {
+    return res.status(400).json({
+      status: "error",
+      code: 400,
+      message: "Not found",
+      data: "Bad request",
+    });
+  }
+  try {
+    if (!user.verificationToken) {
+      return res.status(401).json({
+        status: "error",
+        code: 401,
+        message: "Not found",
+        data: "Bad request",
+      });
+    }
+    await User.findByIdAndUpdate(
+      { _id: user.id },
+      { verificationToken: null, verify: true },
+      { new: true }
+    );
+
+    return res.json({
+      status: "success",
+      code: 200,
+      message: 'Verification successful'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyCont = async (req, res, next) => {
+
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({
+      status: "error",
+      code: 400,
+      message: "missing required field email",
+      data: "Bad request",
+    });
+  }
+  try {
+    const user = await User.findOne({ email });
+    console.log(user);
+    if (!user.verify) {
+      console.log(user.verificationToken);
+      const msg = {
+        to: email,
+        from: email,
+        subject: "Thank you for registration",
+        html: `Wellcame in our website <a href="http://localhost:3000/api/users/verify/${user.verificationToken}">please confirm your email adress </a>`,
+      };
+      await sgMail.send(msg);
+
+      return res.status(201).json({
+        status: "success",
+        code: 201,
+        message: "Verification email sent"
+      });
+    }
+  } catch (error) {
+    next(
+      res.status(400).json({
+        status: "error",
+        code: 400,
+        message: "Verification has already been passed",
+        data: "Bad request",
+      })
+    );
+  }
+};
+
 const loginCont = async (req, res, next) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email });
@@ -48,6 +142,14 @@ const loginCont = async (req, res, next) => {
       status: "error",
       code: 400,
       message: "Incorrect login or password",
+      data: "Bad request",
+    });
+  }
+  if (!user.verify) {
+    return res.status(401).json({
+      status: "error",
+      code: 401,
+      message: "user not verification",
       data: "Bad request",
     });
   }
@@ -172,4 +274,6 @@ module.exports = {
   currentUser,
   userAvatar,
   logoutCont,
+  verificationCont,
+  verifyCont,
 };

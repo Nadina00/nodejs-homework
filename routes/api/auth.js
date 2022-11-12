@@ -9,6 +9,8 @@ const {
   currentUser,
   userAvatar,
   logoutCont,
+  verificationCont,
+  verifyCont,
 } = require("../../controllers/authControllers");
 
 const { tokenMidleware } = require("../../middlewares/authMidleware");
@@ -30,5 +32,9 @@ router.patch(
   uploadMidleware.single("avatar"),
   userAvatar
 );
+
+router.get("/verify/:verificationToken", verificationCont)
+
+router.post("/verify", verifyCont)
 
 module.exports = router;
